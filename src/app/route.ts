@@ -3,6 +3,10 @@ import path from "node:path";
 
 const SOURCE_HTML_PATH = path.join(process.cwd(), "source", "index.frozen.html");
 const CATALOG_PATH = "/kolekcija";
+const REVALIDATE_SECONDS = 300;
+
+const stripBeaconScripts = (html: string) =>
+  html.replace(/<script\b[^>]*src=["'][^"']*events\.framer\.com[^"']*["'][^>]*><\/script>/gi, "");
 
 const injectCollectionRouting = (html: string) => {
   const clientPatch = `
@@ -93,13 +97,14 @@ const injectCollectionRouting = (html: string) => {
 export async function GET() {
   try {
     const html = await readFile(SOURCE_HTML_PATH, "utf-8");
-    const linkedHtml = html.replace(/href="#kolekcija"/g, `href="${CATALOG_PATH}"`);
+    const cleanHtml = stripBeaconScripts(html);
+    const linkedHtml = cleanHtml.replace(/href="#kolekcija"/g, `href="${CATALOG_PATH}"`);
     const patchedHtml = injectCollectionRouting(linkedHtml);
 
     return new Response(patchedHtml, {
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
+        "cache-control": `public, s-maxage=${REVALIDATE_SECONDS}, stale-while-revalidate=86400`,
       },
     });
   } catch (error) {
