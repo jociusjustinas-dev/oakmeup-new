@@ -1,8 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 const DEPLOYED_CATALOG_URL = "https://produktai.oakmeup.lt";
-const HOME_SOURCE_HTML_PATH = path.join(process.cwd(), "source", "index.html");
 const REVALIDATE_SECONDS = 300;
 const GRID_OVERRIDE = `
 <style id="catalog-grid-default-override">
@@ -13,27 +9,8 @@ const GRID_OVERRIDE = `
 </style>
 `;
 
-const extractFirstTag = (html: string, tag: "header" | "footer") => {
-  const match = html.match(new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}>`, "i"));
-  return match ? match[0] : null;
-};
-
-const extractFramerStyles = (html: string) => {
-  const styles = html.match(/<style\b[\s\S]*?<\/style>/gi) ?? [];
-  return styles.filter((block) => block.includes("data-framer") || block.includes("framer-")).join("\n");
-};
-
-const applyCatalogOverrides = (
-  html: string,
-  shell?: { header: string; footer: string; styles: string },
-) => {
+const applyCatalogOverrides = (html: string) => {
   let output = html;
-  if (shell) {
-    output = output.replace(/<header\b[\s\S]*?<\/header>/i, "");
-    output = output.replace(/<footer\b[\s\S]*?<\/footer>/i, "");
-    output = output.replace(/<body>/i, `<body>\n${shell.header}`);
-    output = output.replace(/<\/body>/i, `${shell.footer}\n</body>`);
-  }
   output = output.replace("let viewMode='list';", "let viewMode='grid';");
   output = output.replace(
     'id="view-list" class="view-toggle-btn active" onclick="setView(\'list\')" title="Sąrašas" aria-pressed="true"',
@@ -43,34 +20,22 @@ const applyCatalogOverrides = (
     'id="view-grid" class="view-toggle-btn" onclick="setView(\'grid\')" title="Tinklelis" aria-pressed="false"',
     'id="view-grid" class="view-toggle-btn active" onclick="setView(\'grid\')" title="Tinklelis" aria-pressed="true"',
   );
-  if (shell?.styles) {
-    output = output.replace(/<\/head>/i, `${shell.styles}\n${GRID_OVERRIDE}\n</head>`);
-  } else {
-    output = output.replace(/<\/head>/i, `${GRID_OVERRIDE}\n</head>`);
-  }
+  output = output.replace(/<\/head>/i, `${GRID_OVERRIDE}\n</head>`);
   return output;
 };
 
 export async function GET() {
   try {
-    const [catalogResponse, homeSourceHtml] = await Promise.all([
-      fetch(DEPLOYED_CATALOG_URL, {
-        next: { revalidate: REVALIDATE_SECONDS },
-      }),
-      readFile(HOME_SOURCE_HTML_PATH, "utf-8"),
-    ]);
+    const catalogResponse = await fetch(DEPLOYED_CATALOG_URL, {
+      next: { revalidate: REVALIDATE_SECONDS },
+    });
 
     if (!catalogResponse.ok) {
       throw new Error(`Failed to fetch deployed catalog: ${catalogResponse.status}`);
     }
 
-    const header = extractFirstTag(homeSourceHtml, "header");
-    const footer = extractFirstTag(homeSourceHtml, "footer");
-    const styles = extractFramerStyles(homeSourceHtml);
-    const shell = header && footer ? { header, footer, styles } : undefined;
-
     const catalogHtml = await catalogResponse.text();
-    const patchedHtml = applyCatalogOverrides(catalogHtml, shell);
+    const patchedHtml = applyCatalogOverrides(catalogHtml);
     return new Response(patchedHtml, {
       headers: {
         "content-type": "text/html; charset=utf-8",
