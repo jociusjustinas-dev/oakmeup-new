@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 const DEPLOYED_CATALOG_URL = "https://produktai.oakmeup.lt";
-const HOME_SOURCE_HTML_PATH = "/Users/justinasjocius/Downloads/index.html";
+const HOME_SOURCE_HTML_PATH = path.join(process.cwd(), "source", "index.html");
+const REVALIDATE_SECONDS = 300;
 const GRID_OVERRIDE = `
 <style id="catalog-grid-default-override">
   .catalog-root--grid .sub-block{grid-template-columns:repeat(4,minmax(0,1fr)) !important;}
@@ -52,7 +54,9 @@ const applyCatalogOverrides = (
 export async function GET() {
   try {
     const [catalogResponse, homeSourceHtml] = await Promise.all([
-      fetch(DEPLOYED_CATALOG_URL, { cache: "no-store" }),
+      fetch(DEPLOYED_CATALOG_URL, {
+        next: { revalidate: REVALIDATE_SECONDS },
+      }),
       readFile(HOME_SOURCE_HTML_PATH, "utf-8"),
     ]);
 
@@ -70,7 +74,7 @@ export async function GET() {
     return new Response(patchedHtml, {
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
+        "cache-control": `public, s-maxage=${REVALIDATE_SECONDS}, stale-while-revalidate=86400`,
       },
     });
   } catch (error) {
